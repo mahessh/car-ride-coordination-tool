@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Ride Coordination Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-xl">
+        <h1 class="text-2xl font-bold mb-4">Car Ride Coordination Tool</h1>
+        <form id="rideForm" class="space-y-4">
+            <select id="mode" class="w-full p-2 border rounded">
+                <option value="">Select mode</option>
+                <option value="ask">Ask for a ride</option>
+                <option value="provide">Provide a ride</option>
+                <option value="carpool">Carpool</option>
+                <option value="match">Match riders and drivers</option>
+            </select>
+            <input type="text" id="name" placeholder="Name" class="w-full p-2 border rounded">
+            <input type="number" id="people" placeholder="Number of people" class="w-full p-2 border rounded">
+            <input type="text" id="location" placeholder="Pickup location" class="w-full p-2 border rounded">
+            <input type="time" id="time" placeholder="Pickup time" class="w-full p-2 border rounded">
+            <button type="submit" id="submitBtn" class="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                Submit
+            </button>
+        </form>
+
+        <div class="mt-8">
+            <h2 class="text-xl font-semibold mb-2">Chat History</h2>
+            <div id="chatHistory" class="border rounded-lg p-4 h-64 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script>
+        // Google Apps Script Web App URL
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw6rA2YU1LXfsUShznTzkWmdtelrLtrs9WCVi3Udo56iy9_39tkiUnm0A2Ng2Q2uh5X/exec';
+
+        // Function to call ChatGPT API (via Google Apps Script)
+        async function callChatGPT(prompt) {
+            try {
+                const response = await axios.post(SCRIPT_URL, {
+                    action: 'processChatGPT',
+                    prompt: prompt
+                });
+                return response.data.result;
+            } catch (error) {
+                console.error('Error calling ChatGPT:', error);
+                return 'Error processing request';
+            }
+        }
+
+        // Function to save data to Google Sheets
+        async function saveToSheet(data) {
+            try {
+                await axios.post(SCRIPT_URL, {
+                    action: 'saveData',
+                    data: data
+                });
+                console.log('Data saved successfully');
+            } catch (error) {
+                console.error('Error saving data:', error);
+            }
+        }
+
+        // Function to load chat history from Google Sheets
+        async function loadChatHistory() {
+            try {
+                const response = await axios.post(SCRIPT_URL, {
+                    action: 'loadHistory'
+                });
+                response.data.history.forEach(entry => {
+                    addToChatHistory('user', entry.join('|'));
+                });
+            } catch (error) {
+                console.error('Error loading chat history:', error);
+            }
+        }
+
+        document.getElementById('rideForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+
+            const mode = document.getElementById('mode').value;
+            const name = document.getElementById('name').value;
+            const people = document.getElementById('people').value;
+            const location = document.getElementById('location').value;
+            const time = document.getElementById('time').value;
+
+            const userInput = `${mode}|${name}|${people}|${location}|${time}`;
+            
+            // Process with ChatGPT
+            const aiPrompt = `Process this car ride coordination request: ${userInput}`;
+            const processedInput = await callChatGPT(aiPrompt);
+
+            // Save to Google Sheets
+            await saveToSheet([mode, name, people, location, time]);
+
+            addToChatHistory('user', userInput);
+            addToChatHistory('ai', processedInput);
+
+            if (mode === 'match') {
+                const matchPrompt = `Match riders and drivers for this request: ${userInput}`;
+                const matchResult = await callChatGPT(matchPrompt);
+                alert(matchResult);
+            }
+
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit';
+        });
+
+        function addToChatHistory(type, content) {
+            const chatHistory = document.getElementById('chatHistory');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `mb-2 ${type === 'user' ? 'text-right' : 'text-left'}`;
+            const messageSpan = document.createElement('span');
+            messageSpan.className = `inline-block p-2 rounded-lg ${type === 'user' ? 'bg-blue-100' : 'bg-gray-100'}`;
+            messageSpan.textContent = content;
+            messageDiv.appendChild(messageSpan);
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // Load chat history on page load
+        loadChatHistory();
+    </script>
+</body>
+</html>
